@@ -1,5 +1,5 @@
 from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import TEXT, INTEGER, VARCHAR, DATE, TSVECTOR
+from sqlalchemy.dialects.postgresql import TEXT, INTEGER, VARCHAR, DATE, TSVECTOR, BOOLEAN
 
 from .database import Base
 
@@ -25,3 +25,5 @@ class Course(Base):
     seats_filled = Column(INTEGER)
     seats_total = Column(INTEGER)
     tsv = Column(TSVECTOR)
+    major_restricted = Column(BOOLEAN)
+    communication_intensive = Column(BOOLEAN)
