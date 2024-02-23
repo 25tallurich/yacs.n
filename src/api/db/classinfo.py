@@ -330,8 +330,202 @@ class ClassInfo:
       return None
 
 
-    def get_classes_by_search(self, semester=None, search=None):
+    def get_classes_by_search(self, semester=None, search=None, comm_intensive=False):
       if semester is not None:
+        if(comm_intensive):
+            return self.db_conn.execute("""
+              WITH ts AS (
+                  SELECT
+                      c.department,
+                      c.level,
+                      CONCAT(c.department, '-', c.level) AS name,
+                      MAX(c.title) AS title,
+                      c.full_title,
+                      c.min_credits,
+                      c.max_credits,
+                      c.description,
+                      c.frequency,
+                      MAX(c.ts_rank) AS ts_rank,
+                      c.communication_intensive,
+                      c.major_restricted,
+                      (
+                          SELECT JSON_AGG(copre.prerequisite)
+                          FROM course_prerequisite copre
+                          WHERE c.department = copre.department
+                            AND c.level = copre.level
+                      ) AS prerequisites,
+                      (
+                          SELECT JSON_AGG(coco.corequisite)
+                          FROM course_corequisite coco
+                          WHERE c.department = coco.department
+                            AND c.level = coco.level
+                      ) AS corequisites,
+                      c.raw_precoreqs,
+                      c.date_start,
+                      c.date_end,
+                      JSON_AGG(
+                          row_to_json(section.*)
+                      ) sections,
+                      c.semester
+                  FROM
+                      (
+                          SELECT 
+                              *,
+                              ts_rank_cd(course.tsv, plainto_tsquery(%(search)s)) AS ts_rank
+                          FROM
+                              course
+                      ) AS c
+                  LEFT JOIN
+                      (
+                          SELECT
+                              c1.crn,
+                              c1.seats_open,
+                              c1.seats_filled,
+                              c1.seats_total,
+                              c1.semester,
+                              MAX(c1.department) AS department,
+                              MAX(c1.level) as level,
+                              JSON_AGG(
+                                  row_to_json(cs.*)
+                              ) sessions
+                          FROM
+                              course c1
+                          JOIN course_session cs ON
+                              c1.crn = cs.crn AND
+                              c1.semester = cs.semester
+                          GROUP BY
+                              c1.crn,
+                              c1.semester
+                      ) section
+                      ON
+                          c.department = section.department AND
+                          c.level = section.level AND
+                          c.crn = section.crn
+                  WHERE
+                      c.semester = %(semester)s
+                      AND c.tsv @@ plainto_tsquery(%(search)s)
+                  GROUP BY
+                      c.department,
+                      c.level,
+                      c.date_start,
+                      c.date_end,
+                      c.semester,
+                      c.full_title,
+                      c.min_credits,
+                      c.max_credits,
+                      c.description,
+                      c.frequency,
+                      c.raw_precoreqs,
+                      c.communication_intensive,
+                      c.major_restricted
+                  ORDER BY
+                      ts_rank DESC,
+                      department ASC,
+                      level ASC
+              )
+              SELECT * FROM ts
+              WHERE communication_intensive = TRUE
+              UNION ALL
+              SELECT *
+              FROM
+              (
+                  SELECT
+                      c.department,
+                      c.level,
+                      CONCAT(c.department, '-', c.level) AS name,
+                      MAX(c.title) AS title,
+                      c.full_title,
+                      c.min_credits,
+                      c.max_credits,
+                      c.description,
+                      c.frequency,
+                      MAX(c.ts_rank) AS ts_rank,
+                      c.communication_intensive,
+                      c.major_restricted,
+                      (
+                          SELECT JSON_AGG(copre.prerequisite)
+                          FROM course_prerequisite copre
+                          WHERE c.department = copre.department
+                            AND c.level = copre.level
+                      ) AS prerequisites,
+                      (
+                          SELECT JSON_AGG(coco.corequisite)
+                          FROM course_corequisite coco
+                          WHERE c.department = coco.department
+                            AND c.level = coco.level
+                      ) AS corequisites,
+                      c.raw_precoreqs,
+                      c.date_start,
+                      c.date_end,
+                      JSON_AGG(
+                          row_to_json(section.*)
+                      ) sections,
+                      c.semester
+                  FROM
+                      (
+                          SELECT 
+                              *,
+                              ts_rank_cd(course.tsv, plainto_tsquery(%(search)s)) AS ts_rank
+                          FROM
+                              course
+                      ) AS c
+                  LEFT JOIN
+                      (
+                          SELECT
+                              c1.crn,
+                              c1.seats_open,
+                              c1.seats_filled,
+                              c1.seats_total,
+                              c1.semester,
+                              MAX(c1.department) AS department,
+                              MAX(c1.level) as level,
+                              JSON_AGG(
+                                  row_to_json(cs.*)
+                              ) sessions
+                          FROM
+                              course c1
+                          JOIN course_session cs ON
+                              c1.crn = cs.crn AND
+                              c1.semester = cs.semester
+                          GROUP BY
+                              c1.crn,
+                              c1.semester
+                      ) section
+                      ON
+                          c.department = section.department AND
+                          c.level = section.level AND
+                          c.crn = section.crn
+                  WHERE
+                      c.semester = %(semester)s
+                      AND c.full_title ILIKE %(searchAny)s
+                  GROUP BY
+                      c.department,
+                      c.level,
+                      c.date_start,
+                      c.date_end,
+                      c.semester,
+                      c.full_title,
+                      c.min_credits,
+                      c.max_credits,
+                      c.description,
+                      c.frequency,
+                      c.raw_precoreqs,
+                      c.communication_intensive,
+                      c.major_restricted
+                  ORDER BY
+                      ts_rank DESC,
+                      department ASC,
+                      level ASC
+              ) q2
+              WHERE NOT EXISTS (
+                  SELECT * FROM ts
+              ) AND communication_intensive = TRUE            
+          """, {
+              'search': search,
+              'searchAny': '%' + search + '%',
+              'semester': semester
+          }, True)
+        else:
           return self.db_conn.execute("""
               WITH ts AS (
                 SELECT
@@ -415,8 +609,8 @@ class ClassInfo:
                   c.description,
                   c.frequency,
                   c.raw_precoreqs,
-                  c.communication_intensive,  -- Added field
-                  c.major_restricted  -- Added field
+                  c.communication_intensive,
+                  c.major_restricted
                 ORDER BY
                   ts_rank DESC,
                   department ASC,
@@ -438,8 +632,8 @@ class ClassInfo:
                   c.description,
                   c.frequency,
                   MAX(c.ts_rank) AS ts_rank,
-                  c.communication_intensive,  -- Added field
-                  c.major_restricted,  -- Added field
+                  c.communication_intensive,
+                  c.major_restricted,
                   (
                     SELECT JSON_AGG(copre.prerequisite)
                     FROM course_prerequisite copre
@@ -523,4 +717,6 @@ class ClassInfo:
               'searchAny': '%' + search + '%',
               'semester': semester
           }, True)
+          
+        
       return None
