@@ -328,9 +328,93 @@ class ClassInfo:
           """
           return self.db_conn.execute(communication_intensive_query, [semester], True)
       return None
+    
+    def get_major_restricted_classes(self, semester=None):
+      if semester is not None:
+          major_restricted_query = """
+              SELECT
+                  c.department,
+                  c.level,
+                  CONCAT(c.department, '-', c.level) AS name,
+                  MAX(c.title) AS title,
+                  c.full_title,
+                  c.min_credits,
+                  c.max_credits,
+                  c.description,
+                  c.frequency,
+                  c.communication_intensive,
+                  c.major_restricted,
+                  (
+                    SELECT JSON_AGG(copre.prerequisite)
+                    FROM course_prerequisite copre
+                    WHERE c.department=copre.department
+                      AND c.level=copre.level
+                  ) AS prerequisites,
+                  (
+                    SELECT JSON_AGG(coco.corequisite)
+                    FROM course_corequisite coco
+                    WHERE c.department=coco.department
+                      AND c.level=coco.level
+                  ) AS corequisites,
+                  c.raw_precoreqs,
+                  c.date_start,
+                  c.date_end,
+                  JSON_AGG(
+                    row_to_json(section.*)
+                  ) sections,
+                  c.semester
+              FROM
+                  course c
+              LEFT JOIN
+              (
+                  SELECT
+                      c1.crn,
+                      c1.seats_open,
+                      c1.seats_filled,
+                      c1.seats_total,
+                      c1.semester,
+                      MAX(c1.department) AS department,
+                      MAX(c1.level) as level,
+                      JSON_AGG(
+                          row_to_json(cs.*)
+                      ) sessions
+                  FROM
+                      course c1
+                  JOIN course_session cs on
+                      c1.crn = cs.crn and
+                      c1.semester = cs.semester
+                  GROUP BY
+                      c1.crn,
+                      c1.semester
+              ) section
+              ON
+                  c.department = section.department and
+                  c.level = section.level and
+                  c.crn = section.crn
+              WHERE
+                  c.semester = %s
+                  AND c.major_restricted = TRUE
+              GROUP BY
+                  c.department,
+                  c.level,
+                  c.date_start,
+                  c.date_end,
+                  c.semester,
+                  c.full_title,
+                  c.description,
+                  c.min_credits,
+                  c.max_credits,
+                  c.frequency,
+                  c.raw_precoreqs
+              ORDER BY
+                  c.department ASC,
+                  c.level ASC
+          """
+          return self.db_conn.execute(major_restricted_query, [semester], True)
+      return None
 
 
-    def get_classes_by_search(self, semester=None, search=None, comm_intensive=False):
+    def get_classes_by_search(self, semester=None, search=None, comm_intensive=False, major_resticted=False):
       if semester is not None:
         if(comm_intensive):
             return self.db_conn.execute("""
