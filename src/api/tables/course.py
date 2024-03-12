@@ -26,4 +26,4 @@ class Course(Base):
     seats_total = Column(INTEGER)
     tsv = Column(TSVECTOR)
     major_restricted = Column(BOOLEAN)
-    communication_intensive = Column(BOOLEAN)
+    communication_intensive = Column(VARCHAR(length=255))
