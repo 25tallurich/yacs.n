@@ -393,7 +393,6 @@ class ClassInfo:
                     c.crn = section.crn
                 WHERE
                     c.semester = %s
-                    AND c.major_restricted = TRUE
                     AND EXISTS (
                         SELECT 1
                         FROM unnest(string_to_array(c.major_restricted, ',')) AS mr(major)
