@@ -393,7 +393,6 @@ class ClassInfo:
                     c.crn = section.crn
                 WHERE
                     c.semester = %s
-                    AND c.major_restricted = TRUE
                     AND EXISTS (
                         SELECT 1
                         FROM unnest(string_to_array(c.major_restricted, ',')) AS mr(major)
@@ -492,6 +491,12 @@ class ClassInfo:
                 WHERE
                     c.semester = %(semester)s
                     AND c.tsv @@ plainto_tsquery(%(search)s)
+                    AND c.major_restricted = TRUE
+                    AND EXISTS (
+                        SELECT 1
+                        FROM unnest(string_to_array(c.major_restricted, ',')) AS mr(major)
+                        WHERE mr.major = ANY(%(majors)s)
+                    )
                 GROUP BY
                     c.department,
                     c.level,
@@ -512,7 +517,7 @@ class ClassInfo:
                     level ASC
             )
             SELECT * FROM ts
-            WHERE communication_intensive = TRUE AND major_restricted = TRUE
+            WHERE communication_intensive = TRUE
             UNION ALL
             SELECT *
             FROM
@@ -607,7 +612,7 @@ class ClassInfo:
             ) q2
             WHERE NOT EXISTS (
                 SELECT * FROM ts
-            ) AND communication_intensive = TRUE AND major_restricted = TRUE            
+            ) AND communication_intensive = TRUE          
         """, {
             'search': search,
             'searchAny': '%' + search + '%',
@@ -878,6 +883,12 @@ class ClassInfo:
                   WHERE
                       c.semester = %(semester)s
                       AND c.tsv @@ plainto_tsquery(%(search)s)
+                      AND c.major_restricted = TRUE
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(string_to_array(c.major_restricted, ',')) AS mr(major)
+                        WHERE mr.major = ANY(%(majors)s)
+                      )
                   GROUP BY
                       c.department,
                       c.level,
@@ -898,7 +909,6 @@ class ClassInfo:
                       level ASC
               )
               SELECT * FROM ts
-              WHERE major_restricted = TRUE
               UNION ALL
               SELECT *
               FROM
